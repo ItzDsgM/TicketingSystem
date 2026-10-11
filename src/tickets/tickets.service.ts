@@ -93,4 +93,20 @@ export class TicketsService {
       };
     });
   }
+
+  /**
+   * Consulta todas las boletas digitales emitidas para un usuario específico,
+   * ordenadas cronológicamente con su función, película, sala y asiento.
+   */
+  async findMyTickets(userId: string): Promise<Ticket[]> {
+    return this.ticketRepo.find({
+      where: { reservation: { user: { id: userId } } },
+      relations: {
+        seat: true,
+        reservation: { showtime: { movie: true, room: true } },
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
 }
+

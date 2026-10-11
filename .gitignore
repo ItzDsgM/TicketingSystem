@@ -18,3 +18,7 @@ yarn-error.log*
 
 # Real prod credentials, never commit
 postman/*.local.postman_environment.json
+
+# Local documentation and agent instructions
+AGENTS.md
+docs/

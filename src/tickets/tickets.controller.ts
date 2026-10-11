@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { TicketsService } from './tickets.service';
 import { ValidateTicketDto } from './dtos/validate-ticket.dto';
-import { Auth } from '../common/decorators';
+import { Auth, GetUser } from '../common/decorators';
 import { ValidRoles } from '../common/enums/valid-roles.enum';
 
 @ApiTags('tickets')
@@ -10,12 +10,21 @@ import { ValidRoles } from '../common/enums/valid-roles.enum';
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
 
+  @Get('my-tickets')
+  @Auth(ValidRoles.CUSTOMER, ValidRoles.ADMIN)
+  @ApiOperation({ summary: 'Listar todas las boletas digitales del usuario autenticado (RF-10)' })
+  @ApiResponse({ status: 200, description: 'Lista de boletas digitales del usuario' })
+  findMyTickets(@GetUser('id') userId: string) {
+    return this.ticketsService.findMyTickets(userId);
+  }
+
   @Get('reservation/:reservationId')
   @Auth()
   @ApiOperation({ summary: 'Obtener todos los tickets de una reserva específica' })
   findByReservation(@Param('reservationId', ParseUUIDPipe) reservationId: string) {
     return this.ticketsService.findAllByReservation(reservationId);
   }
+
 
   @Get('code/:code')
   @Auth(ValidRoles.COUNTER, ValidRoles.ADMIN)
