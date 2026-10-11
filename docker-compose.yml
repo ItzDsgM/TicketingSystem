@@ -2,6 +2,10 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Optional: values come from .env when present, otherwise the defaults below (same as .env.example).
+    env_file:
+      - path: .env.example
+        required: false
     environment:
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -22,15 +26,25 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - path: .env.example
+        required: false
     environment:
       DB_HOST: db
       DB_PORT: 5432
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_DATABASE: ${DB_DATABASE:-cinema_db}
+      DB_SSL: ${DB_SSL:-false}
       DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-2h}
+      TWO_FACTOR_ISSUER: ${TWO_FACTOR_ISSUER:-CineReserva}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin123}
+      SEED_COUNTER_PASSWORD: ${SEED_COUNTER_PASSWORD:-Counter123}
+      SEED_CUSTOMER_PASSWORD: ${SEED_CUSTOMER_PASSWORD:-Customer123}
+      VIP_PRICE_MULTIPLIER: ${VIP_PRICE_MULTIPLIER:-1.5}
+      PORT: 3000
     ports:
       - "${PORT:-3000}:3000"
 

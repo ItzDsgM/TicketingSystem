@@ -142,7 +142,12 @@ showtimes = folder("6. Showtimes", [
     req("Showtime detail and seat map", "GET", "/showtimes/{{showtimeId}}",
         tests=status_test(200) + [
             "const seats = pm.response.json().room.seats;",
-            "if (seats && seats.length) pm.collectionVariables.set('seatId', seats[0].id);",
+            "if (seats && seats.length) {",
+            "  pm.collectionVariables.set('seatId', seats[0].id);",
+            "  if (seats.length > 1) pm.collectionVariables.set('secondSeatId', seats[1].id);",
+            "  const vip = seats.find(s => s.type === 'VIP');",
+            "  if (vip) pm.collectionVariables.set('vipSeatId', vip.id);",
+            "}",
         ]),
 ])
 
@@ -151,17 +156,86 @@ booking = folder("7. Booking and check-in", [
         token="customerToken", tests=saving(201, [("seatHoldId", "body[0].id")])),
     req("Hold same seat again (409)", "POST", "/seat-holds", {"showtimeId": "{{showtimeId}}", "seatIds": ["{{seatId}}"]},
         token="customerToken", tests=status_test(409)),
-    req("Confirm reservation (customer)", "POST", "/reservations/confirm", {"showtimeId": "{{showtimeId}}", "seatHoldIds": ["{{seatHoldId}}"]},
-        token="customerToken", tests=saving(201, [("reservationId", "body.id")])),
+    req("Confirm reservation (customer, RF03/RF08)", "POST", "/reservations/confirm", {"showtimeId": "{{showtimeId}}", "seatHoldIds": ["{{seatHoldId}}"]},
+        token="customerToken", tests=saving(201, [("reservationId", "body.id")]) + [
+            "pm.test('reservation confirmed', () => pm.expect(pm.response.json().status).to.eql('CONFIRMED'));",
+        ]),
     req("Get my reservation", "GET", "/reservations/{{reservationId}}", token="customerToken", tests=status_test(200)),
+    req("My reservations history (customer, RF10/RF12)", "GET", "/reservations/me", token="customerToken",
+        tests=status_test(200) + [
+            "pm.test('has summary and collections', () => {",
+            "  const b = pm.response.json();",
+            "  pm.expect(b).to.have.property('summary');",
+            "  pm.expect(b).to.have.property('upcoming');",
+            "  pm.expect(b).to.have.property('past');",
+            "});",
+        ]),
+    req("My reservations upcoming filter", "GET", "/reservations/me", token="customerToken", query=[("timeframe", "upcoming")],
+        tests=status_test(200) + ["pm.test('is array', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"]),
+    req("My reservations past filter", "GET", "/reservations/me", token="customerToken", query=[("timeframe", "past")],
+        tests=status_test(200) + ["pm.test('is array', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"]),
+    req("My tickets list (customer, RF10)", "GET", "/tickets/my-tickets", token="customerToken",
+        tests=status_test(200) + ["pm.test('is array', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"]),
     req("Tickets of the reservation", "GET", "/tickets/reservation/{{reservationId}}", token="customerToken",
-        tests=saving(200, [("ticketCode", "body[0].code")])),
+        tests=saving(200, [("ticketCode", "body[0].code")]) + [
+            "pm.test('ticket has unit price', () => pm.expect(pm.response.json()[0]).to.have.property('price'));",
+        ]),
     req("Validate ticket at the door (counter)", "POST", "/tickets/validate/{{ticketCode}}", {"showtimeId": "{{showtimeId}}"},
         token="counterToken", tests=status_test(200)),
     req("Validate same ticket again (409)", "POST", "/tickets/validate/{{ticketCode}}", {},
         token="counterToken", tests=status_test(409)),
     req("Validate as customer (403)", "POST", "/tickets/validate/{{ticketCode}}", {}, token="customerToken", tests=status_test(403)),
+    req("Cancel reservation with used ticket (400, RF13)", "PATCH", "/reservations/{{reservationId}}/cancel", {},
+        token="customerToken", tests=status_test(400)),
+    folder("Cancellation and seat release flow (RF13)", [
+        req("Hold second seat", "POST", "/seat-holds", {"showtimeId": "{{showtimeId}}", "seatIds": ["{{secondSeatId}}"]},
+            token="customerToken", tests=saving(201, [("secondSeatHoldId", "body[0].id")])),
+        req("Confirm second reservation", "POST", "/reservations/confirm", {"showtimeId": "{{showtimeId}}", "seatHoldIds": ["{{secondSeatHoldId}}"]},
+            token="customerToken", tests=saving(201, [("cancellableReservationId", "body.id")])),
+        req("Cancel reservation as counter staff (403)", "PATCH", "/reservations/{{cancellableReservationId}}/cancel", {},
+            token="counterToken", tests=status_test(403)),
+        req("Cancel reservation as owner customer (200)", "PATCH", "/reservations/{{cancellableReservationId}}/cancel", {},
+            token="customerToken", tests=status_test(200) + [
+                "pm.test('reservation is CANCELLED', () => pm.expect(pm.response.json().status).to.eql('CANCELLED'));",
+            ]),
+        req("Cancel already cancelled reservation (400)", "PATCH", "/reservations/{{cancellableReservationId}}/cancel", {},
+            token="customerToken", tests=status_test(400)),
+        req("Seat is freed after cancellation (can hold again)", "POST", "/seat-holds", {"showtimeId": "{{showtimeId}}", "seatIds": ["{{secondSeatId}}"]},
+            token="customerToken", tests=status_test(201)),
+    ]),
     req("All reservations (admin)", "GET", "/reservations", token="adminToken", tests=status_test(200)),
+])
+
+reports = folder("8. Reports (admin, RF12/RF15)", [
+    req("Consolidated summary report (admin)", "GET", "/reports/summary", token="adminToken",
+        tests=status_test(200) + [
+            "pm.test('has summary metrics', () => {",
+            "  const b = pm.response.json();",
+            "  pm.expect(b).to.have.property('totalShowtimes');",
+            "  pm.expect(b).to.have.property('totalRevenue');",
+            "  pm.expect(b).to.have.property('breakdownBySeatType');",
+            "  pm.expect(b).to.have.property('movies');",
+            "});",
+        ]),
+    req("Summary report filtered by movie (admin)", "GET", "/reports/summary", token="adminToken",
+        query=[("movieId", "{{movieId}}")], tests=status_test(200)),
+    req("Summary report filtered by room (admin)", "GET", "/reports/summary", token="adminToken",
+        query=[("roomId", "{{roomId}}")], tests=status_test(200)),
+    req("Showtime report with seat type breakdown (admin)", "GET", "/reports/showtimes/{{showtimeId}}", token="adminToken",
+        tests=status_test(200) + [
+            "pm.test('has showtime metrics and breakdown', () => {",
+            "  const b = pm.response.json();",
+            "  pm.expect(b).to.have.property('totalCapacity');",
+            "  pm.expect(b).to.have.property('ticketsSold');",
+            "  pm.expect(b).to.have.property('occupancyPercentage');",
+            "  pm.expect(b).to.have.property('breakdownBySeatType');",
+            "  pm.expect(b.breakdownBySeatType).to.have.property('normal');",
+            "  pm.expect(b.breakdownBySeatType).to.have.property('vip');",
+            "});",
+        ]),
+    req("Summary report as customer (403)", "GET", "/reports/summary", token="customerToken", tests=status_test(403)),
+    req("Showtime report as customer (403)", "GET", "/reports/showtimes/{{showtimeId}}", token="customerToken", tests=status_test(403)),
+    req("Showtime report invalid UUID (400)", "GET", "/reports/showtimes/not-a-valid-uuid", token="adminToken", tests=status_test(400)),
 ])
 
 health = folder("0. Health", [req("Health check", "GET", "/health", tests=status_test(200))])
@@ -172,7 +246,8 @@ variables = {
     "counterEmail": "counter@cinereserva.com", "counterPassword": "Counter123",
     "adminToken": "", "counterToken": "", "customerToken": "", "tempToken": "",
     "customerId": "", "customerEmail": "", "staffId": "", "roleId": "", "twoFactorSecret": "", "totp": "",
-    "movieId": "", "roomId": "", "showtimeId": "", "seatId": "", "seatHoldId": "", "reservationId": "", "ticketCode": "",
+    "movieId": "", "roomId": "", "showtimeId": "", "seatId": "", "secondSeatId": "", "vipSeatId": "",
+    "seatHoldId": "", "secondSeatHoldId": "", "reservationId": "", "cancellableReservationId": "", "ticketCode": "",
 }
 
 collection = {
@@ -182,7 +257,7 @@ collection = {
         "description": "Run the folders in order (Collection Runner works too). Tokens and ids are stored in collection variables by the test scripts. Requires the seed: `pnpm seed` locally or `docker compose exec api node dist/seed/seed.js`.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     },
-    "item": [health, auth, users, roles, movies, rooms, showtimes, booking],
+    "item": [health, auth, users, roles, movies, rooms, showtimes, booking, reports],
     "variable": [{"key": k, "value": v, "type": "string"} for k, v in variables.items()],
 }
 

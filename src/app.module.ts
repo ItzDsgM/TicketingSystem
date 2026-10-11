@@ -13,6 +13,7 @@ import { ShowtimesModule } from './showtimes/showtimes.module';
 import { SeatHoldsModule } from './seat-holds/seat-holds.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { ReportsModule } from './reports/reports.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -32,6 +33,7 @@ import { HealthModule } from './health/health.module';
     SeatHoldsModule,
     ReservationsModule,
     TicketsModule,
+    ReportsModule,
     HealthModule,
   ],
   controllers: [],

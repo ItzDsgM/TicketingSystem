@@ -119,4 +119,24 @@ describe('TicketsService', () => {
       await expect(service.validateTicket('code-1', 'show-1')).resolves.toMatchObject({ access: 'GRANTED' });
     });
   });
+
+  describe('findMyTickets', () => {
+    it('retorna las boletas del usuario ordenadas por createdAt DESC', async () => {
+      const tickets = [ticketMock({ id: 't-1' }), ticketMock({ id: 't-2' })];
+      ticketRepo.find.mockResolvedValue(tickets);
+
+      const result = await service.findMyTickets('user-1');
+
+      expect(ticketRepo.find).toHaveBeenCalledWith({
+        where: { reservation: { user: { id: 'user-1' } } },
+        relations: {
+          seat: true,
+          reservation: { showtime: { movie: true, room: true } },
+        },
+        order: { createdAt: 'DESC' },
+      });
+      expect(result).toEqual(tickets);
+    });
+  });
 });
+
